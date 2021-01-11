@@ -177,8 +177,6 @@ class _SectionLobbyState extends State<SectionLobby> {
 
     var size = MediaQuery.of(context).size;
 
-    final double itemHeight = (size.height - kToolbarHeight - 24) / 3;
-    final double itemWidth = size.width / 11;
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton(
@@ -207,10 +205,13 @@ class _SectionLobbyState extends State<SectionLobby> {
                           stops: [0.0, 0.3, 0.7, 1.0],
                           tileMode: TileMode.clamp),
                     ),
-                    height: MediaQuery.of(context).size.height * 1,
+                    height: size.height * 1,
                     child: Padding(
                       padding: EdgeInsets.only(
-                          top: 60.0, bottom: 60.0, left: 15, right: 15),
+                          top: size.height * 0.20,
+                          bottom: size.height * 0.20,
+                          left: size.height * 0.015,
+                          right: size.height * 0.015),
                       child: GridView.count(
                         scrollDirection: Axis.horizontal,
                         crossAxisCount: 2,
@@ -338,8 +339,6 @@ class _VideoAppState extends State<VideoApp> {
   @override
   Widget build(BuildContext context) {
     var size = MediaQuery.of(context).size;
-    final double itemHeight = (size.height - kToolbarHeight) / 2.9;
-    final double itemWidth = size.width / 12;
 
     // widget.related.removeWhere((item) => item == widget.video);
     print(size.height);
