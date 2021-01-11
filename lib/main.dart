@@ -214,7 +214,7 @@ class _SectionLobbyState extends State<SectionLobby> {
                       child: GridView.count(
                         scrollDirection: Axis.horizontal,
                         crossAxisCount: 2,
-                        childAspectRatio: (itemWidth / itemHeight),
+                        childAspectRatio: 0.56,
                         children: ids.map((String value) {
                           return new InkWell(
                             onTap: () {
@@ -342,7 +342,7 @@ class _VideoAppState extends State<VideoApp> {
     final double itemWidth = size.width / 12;
 
     // widget.related.removeWhere((item) => item == widget.video);
-
+    print(size.height);
     return Scaffold(
       body: SafeArea(
         child: GestureDetector(
@@ -405,7 +405,7 @@ class _VideoAppState extends State<VideoApp> {
                     if (_timer != null && _timer.isActive) _timer.cancel();
                   },
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(maxHeight: 110.0),
+                    constraints: BoxConstraints(maxHeight: size.height / 4),
                     child: AnimatedContainer(
                       margin: EdgeInsets.only(top: size.height * 0.025),
                       height: fullscreen ? 0 : size.height * 0.35,
@@ -413,7 +413,7 @@ class _VideoAppState extends State<VideoApp> {
                       child: GridView.count(
                         crossAxisCount: 1,
                         scrollDirection: Axis.horizontal,
-                        childAspectRatio: (itemWidth / itemHeight),
+                        childAspectRatio: 0.56,
                         children: widget.related.map((value) {
                           return new InkWell(
                             onTap: () {
