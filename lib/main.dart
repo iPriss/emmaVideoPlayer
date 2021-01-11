@@ -61,23 +61,11 @@ class _SectionLobbyState extends State<SectionLobby> {
     }
   }
 
-  getRandomList<String>(List list, int n) {
-    List<String> randomList = new List();
-
-    if (list.length > 0) {
-      if (list.length < n) n = list.length;
-
-      for (var i = 0; i <= n; i++) {
-        final random = new Random();
-        int i = random.nextInt(list.length);
-        if ( randomList.contains(list[i]) ) {
-          i--;
-        } else {
-          randomList.add(list[i]);
-        }
-      }
-    }
-    return randomList;
+  getRandomList<String>(List<String> list, int n, String currentId) {
+    if (list.length <= 0) return [];
+    return (list.toList()..shuffle())
+        .sublist(0, (list.length > n) ? n : list.length)
+          ..remove(currentId);
   }
 
   parseIdsFromHtml<List>(String contents) {
@@ -137,6 +125,35 @@ class _SectionLobbyState extends State<SectionLobby> {
     print("Download completed");
   }
 
+  Future<void> downloadAllVideos() async {
+    await downloadFile('http://192.168.0.49/series/peppa/', 'videos.html');
+    List<String> currentIds = await _getIds();
+
+    final dir = await getApplicationDocumentsDirectory();
+    final rawListOfVideos = File('${dir.path}/videos.html');
+
+    String contents = await rawListOfVideos.readAsString();
+    List<String> ids = parseIdsFromHtml(contents);
+    List<String> idNotDownloadedYet =
+        ids.toSet().difference(currentIds.toSet()).toList();
+
+    var i = 1;
+    for (String element in idNotDownloadedYet) {
+      print('Downloading video $element [$i from ' +
+          idNotDownloadedYet.length.toString() +
+          ']');
+      await downloadFile(
+          'http://192.168.0.49/series/${widget.section}/$element.mp4',
+          'videos/${widget.section}/$element.mp4');
+      await downloadFile(
+          'http://192.168.0.49/series/${widget.section}/thumbnails/$element.jpeg',
+          'thumbnails/${widget.section}/$element.jpeg');
+      i++;
+    }
+
+    print(idNotDownloadedYet.length.toString() + ' Downloaded');
+  }
+
   Future<void> downloadRandomVideo() async {
     await downloadFile('http://192.168.0.49/series/peppa/', 'videos.html');
     List<String> currentIds = await _getIds();
@@ -146,16 +163,20 @@ class _SectionLobbyState extends State<SectionLobby> {
 
     String contents = await rawListOfVideos.readAsString();
     List<String> ids = parseIdsFromHtml(contents);
-    List<String> idNotDownloadedYet = ids.toSet().difference(currentIds.toSet()).toList();
-    var randomItem = (idNotDownloadedYet.toList()..shuffle()).first;
+    List<String> idNotDownloadedYet =
+        ids.toSet().difference(currentIds.toSet()).toList();
 
-    await downloadFile(
-       'http://192.168.0.49/series/${widget.section}/$randomItem.mp4',
-       'videos/${widget.section}/$randomItem.mp4');
-    await downloadFile(
-       'http://192.168.0.49/series/${widget.section}/thumbnails/$randomItem.jpeg',
-       'thumbnails/${widget.section}/$randomItem.jpeg');
-    // print(randomItem);
+    if (idNotDownloadedYet.length > 0) {
+      var randomItem = (idNotDownloadedYet.toList()..shuffle()).first;
+      await downloadFile(
+          'http://192.168.0.49/series/${widget.section}/$randomItem.mp4',
+          'videos/${widget.section}/$randomItem.mp4');
+      await downloadFile(
+          'http://192.168.0.49/series/${widget.section}/thumbnails/$randomItem.jpeg',
+          'thumbnails/${widget.section}/$randomItem.jpeg');
+    } else {
+      print("Up to Date...");
+    }
   }
 
   @override
@@ -189,11 +210,13 @@ class _SectionLobbyState extends State<SectionLobby> {
       floatingActionButton: new Opacity(
         opacity: this.downloading ? 1 : 0,
         child: FloatingActionButton(
-          onPressed: () {
-            downloadRandomVideo();
-            // Add your onPressed code here!
-          },
-          child: Icon(this.downloading ? Icons.cloud_queue : Icons.cloud_download_outlined)),
+            onPressed: () {
+              downloadRandomVideo();
+              // downloadAllVideos();
+            },
+            child: Icon(this.downloading
+                ? Icons.cloud_queue
+                : Icons.cloud_download_outlined)),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -236,7 +259,7 @@ class _SectionLobbyState extends State<SectionLobby> {
                                       directory: directory,
                                       section: widget.section,
                                       video: value,
-                                      related: getRandomList(ids, 30)),
+                                      related: getRandomList(ids, 30, value)),
                                 ),
                               );
                             },
