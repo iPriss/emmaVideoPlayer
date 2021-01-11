@@ -186,12 +186,15 @@ class _SectionLobbyState extends State<SectionLobby> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: new Opacity(
+        opacity: this.downloading ? 1 : 0,
+        child: FloatingActionButton(
           onPressed: () {
             downloadRandomVideo();
             // Add your onPressed code here!
           },
           child: Icon(this.downloading ? Icons.cloud_queue : Icons.cloud_download_outlined)),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Container(
