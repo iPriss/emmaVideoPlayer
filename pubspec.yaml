@@ -29,6 +29,7 @@ dependencies:
   # flick_video_player: 0.1.1
   wakelock: ^0.2.1+1
   flutter_launcher_icons: ^0.8.1
+  dio: ^3.0.8
   
 
 

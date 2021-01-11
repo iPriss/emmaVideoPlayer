@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:path/path.dart';
 import "dart:math";
 import 'package:wakelock/wakelock.dart';
+import 'package:dio/dio.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,11 +18,7 @@ void main() {
   ]).then((_) {
     runApp(
       new MaterialApp(
-        theme: ThemeData(
-            // brightness: Brightness.dark,
-            // primaryColor: Colors.blueGrey,
-            // primaryColor: Colors.black,
-            scaffoldBackgroundColor: Colors.black),
+        theme: ThemeData(scaffoldBackgroundColor: Colors.black),
         title: 'Discovery Kid Omar',
         debugShowCheckedModeBanner: false,
         home: new SectionLobby(
@@ -78,6 +75,20 @@ class _SectionLobbyState extends State<SectionLobby> {
     return randomList;
   }
 
+  parseIdsFromHtml<List>(String contents) {
+    final ids = contents.split("\n");
+    var parsedIds = <String>[];
+
+    final idsRegex = RegExp(r'\b[0-9]{7}(?![0-9])');
+
+    ids.forEach((element) {
+      if (idsRegex.hasMatch(element)) {
+        parsedIds.add(element.replaceAll('<a href="', '').substring(0, 7));
+      }
+    });
+    return parsedIds;
+  }
+
   Future<List<String>> _getIds() async {
     directory = (await getApplicationDocumentsDirectory()).path;
     List<String> ids = new List();
@@ -93,39 +104,89 @@ class _SectionLobbyState extends State<SectionLobby> {
     return ids;
   }
 
+  Future<void> downloadFile(String url, String destination) async {
+    Dio dio = Dio();
+    bool downloading;
+    var progressString;
+
+    var dir = await getApplicationDocumentsDirectory();
+    print("path ${dir.path}");
+    try {
+      await dio.download(url, "${dir.path}/$destination",
+          onReceiveProgress: (rec, total) {
+        print("Rec: $rec , Total: $total");
+
+        setState(() {
+          downloading = true;
+          progressString = ((rec / total) * 100).toStringAsFixed(0) + "%";
+        });
+      });
+    } catch (e) {
+      print(e);
+    }
+
+    setState(() {
+      downloading = false;
+      progressString = "Completed";
+    });
+    print("Download completed");
+  }
+
+  Future<void> downloadRandomVideo() async {
+    await downloadFile('http://192.168.0.49/series/peppa/', 'videos.html');
+
+    final dir = await getApplicationDocumentsDirectory();
+    final rawListOfVideos = File('${dir.path}/videos.html');
+
+    String contents = await rawListOfVideos.readAsString();
+    List<String> ids = parseIdsFromHtml(contents);
+    var randomItem = (ids.toList()..shuffle()).first;
+
+    await downloadFile(
+        'http://192.168.0.49/series/${widget.section}/$randomItem.mp4',
+        'videos/${widget.section}/$randomItem.mp4');
+    await downloadFile(
+        'http://192.168.0.49/series/${widget.section}/thumbnails/$randomItem.jpeg',
+        'thumbnails/${widget.section}/$randomItem.jpeg');
+    print(randomItem);
+  }
+
   @override
   void initState() {
     super.initState();
 
-    // createFolderInAppDocDir('videos');
-    // createFolderInAppDocDir('videos/peppa');
-    // createFolderInAppDocDir('thumbnails');
-    // createFolderInAppDocDir('thumbnails/peppa');
+    createFolderInAppDocDir('videos');
+    createFolderInAppDocDir('videos/peppa');
+    createFolderInAppDocDir('thumbnails');
+    createFolderInAppDocDir('thumbnails/peppa');
     _setup();
-    // _listofFiles();
   }
 
   _setup() async {
     List<String> _ids = await _getIds();
-
-    setState(() {
-      ids = _ids;
-    });
+    setState(
+      () {
+        ids = _ids;
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     SystemChrome.setEnabledSystemUIOverlays([]);
 
-    print(getRandomList(ids, 30));
-
     var size = MediaQuery.of(context).size;
 
-    /*24 is for notification bar on Android*/
     final double itemHeight = (size.height - kToolbarHeight - 24) / 3;
     final double itemWidth = size.width / 11;
     return Scaffold(
       backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton(
+          onPressed: () {
+            downloadRandomVideo();
+            // Add your onPressed code here!
+          },
+          child: Icon(Icons.cloud_download_outlined)),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Container(
