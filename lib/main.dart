@@ -41,6 +41,7 @@ class SectionLobby extends StatefulWidget {
 class _SectionLobbyState extends State<SectionLobby> {
   String directory;
   List<String> ids = new List();
+  bool downloading = false;
 
   static Future<String> createFolderInAppDocDir(String folderName) async {
     //Get this App Document Directory
@@ -69,7 +70,11 @@ class _SectionLobbyState extends State<SectionLobby> {
       for (var i = 0; i <= n; i++) {
         final random = new Random();
         int i = random.nextInt(list.length);
-        randomList.add(list[i]);
+        if ( randomList.contains(list[i]) ) {
+          i--;
+        } else {
+          randomList.add(list[i]);
+        }
       }
     }
     return randomList;
@@ -106,7 +111,7 @@ class _SectionLobbyState extends State<SectionLobby> {
 
   Future<void> downloadFile(String url, String destination) async {
     Dio dio = Dio();
-    bool downloading;
+
     var progressString;
 
     var dir = await getApplicationDocumentsDirectory();
@@ -134,21 +139,23 @@ class _SectionLobbyState extends State<SectionLobby> {
 
   Future<void> downloadRandomVideo() async {
     await downloadFile('http://192.168.0.49/series/peppa/', 'videos.html');
+    List<String> currentIds = await _getIds();
 
     final dir = await getApplicationDocumentsDirectory();
     final rawListOfVideos = File('${dir.path}/videos.html');
 
     String contents = await rawListOfVideos.readAsString();
     List<String> ids = parseIdsFromHtml(contents);
-    var randomItem = (ids.toList()..shuffle()).first;
+    List<String> idNotDownloadedYet = ids.toSet().difference(currentIds.toSet()).toList();
+    var randomItem = (idNotDownloadedYet.toList()..shuffle()).first;
 
     await downloadFile(
-        'http://192.168.0.49/series/${widget.section}/$randomItem.mp4',
-        'videos/${widget.section}/$randomItem.mp4');
+       'http://192.168.0.49/series/${widget.section}/$randomItem.mp4',
+       'videos/${widget.section}/$randomItem.mp4');
     await downloadFile(
-        'http://192.168.0.49/series/${widget.section}/thumbnails/$randomItem.jpeg',
-        'thumbnails/${widget.section}/$randomItem.jpeg');
-    print(randomItem);
+       'http://192.168.0.49/series/${widget.section}/thumbnails/$randomItem.jpeg',
+       'thumbnails/${widget.section}/$randomItem.jpeg');
+    // print(randomItem);
   }
 
   @override
@@ -184,7 +191,7 @@ class _SectionLobbyState extends State<SectionLobby> {
             downloadRandomVideo();
             // Add your onPressed code here!
           },
-          child: Icon(Icons.cloud_download_outlined)),
+          child: Icon(this.downloading ? Icons.cloud_queue : Icons.cloud_download_outlined)),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Container(
