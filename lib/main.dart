@@ -208,7 +208,7 @@ class _SectionLobbyState extends State<SectionLobby> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: new Opacity(
-        opacity: this.downloading ? 1 : 0,
+        opacity: this.downloading ? 1 : 0.2,
         child: FloatingActionButton(
             onPressed: () {
               downloadRandomVideo();
@@ -373,8 +373,12 @@ class _VideoAppState extends State<VideoApp> {
   Widget build(BuildContext context) {
     var size = MediaQuery.of(context).size;
 
+    final double ratio = 1.77777778;
+    final double magicRatio = ratio / 2.5;
+    final double rHeight = size.width / ratio;
     // widget.related.removeWhere((item) => item == widget.video);
-    print(size.height);
+    final double margin = ( size.height - rHeight ) / 2;
+
     return Scaffold(
       body: SafeArea(
         child: GestureDetector(
@@ -390,20 +394,18 @@ class _VideoAppState extends State<VideoApp> {
                 alignment: Alignment.topCenter,
                 child: Container(
                   child: AnimatedContainer(
-                    margin: new EdgeInsets.symmetric(
-                        vertical: fullscreen || (size.height * 0.10) < 50
-                            ? 0
-                            : size.height * 0.10),
+                    margin: new EdgeInsets.only(
+                        top: fullscreen ? margin : margin * magicRatio, bottom: fullscreen ? margin : margin * magicRatio ),
                     width: fullscreen
                         ? size.width
-                        : size.width / _controller.value.aspectRatio * 1.2,
+                        : size.width * magicRatio,
                     height: fullscreen
                         ? size.height
-                        : (size.height / _controller.value.aspectRatio * 1.2),
+                        : rHeight * magicRatio,
                     duration: Duration(milliseconds: 300),
                     child: _controller.value.initialized
                         ? AspectRatio(
-                            aspectRatio: _controller.value.aspectRatio,
+                            aspectRatio: ratio,
                             child: VideoPlayer(_controller),
                           )
                         : Container(),
