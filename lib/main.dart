@@ -5,7 +5,6 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:path/path.dart';
-import "dart:math";
 import 'package:wakelock/wakelock.dart';
 import 'package:dio/dio.dart';
 
@@ -319,6 +318,8 @@ class _VideoAppState extends State<VideoApp> {
   Timer _timer;
   bool fullscreen = true;
 
+  double position = 0.0;
+
   void startTimer() {
     const oneSec = const Duration(seconds: 5);
     _timer = new Timer.periodic(
@@ -346,6 +347,12 @@ class _VideoAppState extends State<VideoApp> {
         });
       })
       ..addListener(() {
+        setState(
+          () {
+            position = _controller.value.position.inMilliseconds /
+                _controller.value.duration.inMilliseconds;
+          },
+        );
         if (_controller.value.isPlaying) {
           Wakelock.enable();
           if (fullscreen == false) {
@@ -375,9 +382,10 @@ class _VideoAppState extends State<VideoApp> {
 
     final double ratio = 1.77777778;
     final double magicRatio = ratio / 2.5;
-    final double rHeight = size.width / ratio;
+    double rHeight = size.width / ratio;
+    if (rHeight > size.height) rHeight = size.height;
     // widget.related.removeWhere((item) => item == widget.video);
-    final double margin = ( size.height - rHeight ) / 2;
+    final double margin = (size.height - rHeight) / 2;
 
     return Scaffold(
       body: SafeArea(
@@ -395,14 +403,11 @@ class _VideoAppState extends State<VideoApp> {
                 child: Container(
                   child: AnimatedContainer(
                     margin: new EdgeInsets.only(
-                        top: fullscreen ? margin : margin * magicRatio, bottom: fullscreen ? margin : margin * magicRatio ),
-                    width: fullscreen
-                        ? size.width
-                        : size.width * magicRatio,
-                    height: fullscreen
-                        ? size.height
-                        : rHeight * magicRatio,
-                    duration: Duration(milliseconds: 300),
+                        top: fullscreen ? margin : margin * magicRatio,
+                        bottom: fullscreen ? margin : margin * magicRatio),
+                    width: fullscreen ? size.width : size.width * magicRatio,
+                    height: fullscreen ? size.height : rHeight * magicRatio,
+                    duration: Duration(milliseconds: 200),
                     child: _controller.value.initialized
                         ? AspectRatio(
                             aspectRatio: ratio,
@@ -416,7 +421,7 @@ class _VideoAppState extends State<VideoApp> {
                 alignment: Alignment(0, 0.22),
                 child: AnimatedContainer(
                   width: (size.width / _controller.value.aspectRatio) * 1.15,
-                  height: fullscreen ? 0 : 12,
+                  height: fullscreen ? 0 : 15,
                   duration: Duration(milliseconds: 2),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(15),
@@ -433,6 +438,28 @@ class _VideoAppState extends State<VideoApp> {
                 ),
               ),
               Align(
+                alignment: Alignment.lerp(
+                    Alignment(-0.66, 0.225), Alignment(0.66, 0.225), position),
+                child: AnimatedOpacity(
+                  duration: Duration(milliseconds: 2),
+                  opacity: fullscreen ? 0 : 1,
+                  child: IgnorePointer(
+                    child: Container(
+                      padding: EdgeInsets.zero,
+                      decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border:
+                              Border.all(width: 7, color: Color(0xffff5076))),
+                      child: CircleAvatar(
+                        backgroundColor: Colors.white,
+                        radius: 7,
+                        // child: Icon(Icons.add),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Align(
                 alignment: Alignment.bottomCenter,
                 child: GestureDetector(
                   onPanDown: (details) {
@@ -440,51 +467,58 @@ class _VideoAppState extends State<VideoApp> {
                   },
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxHeight: size.height / 4),
-                    child: AnimatedContainer(
-                      margin: EdgeInsets.only(top: size.height * 0.025),
-                      height: fullscreen ? 0 : size.height * 0.35,
+                    child: AnimatedSwitcher(
                       duration: Duration(milliseconds: 300),
-                      child: GridView.count(
-                        crossAxisCount: 1,
-                        scrollDirection: Axis.horizontal,
-                        childAspectRatio: 0.56,
-                        children: widget.related.map((value) {
-                          return new InkWell(
-                            onTap: () {
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (BuildContext context) => VideoApp(
-                                      directory: widget.directory,
-                                      section: widget.section,
-                                      video: value,
-                                      related: widget.related),
-                                ),
-                              );
-                            },
-                            child: Container(
-                              margin: new EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 3,
+                      child: !fullscreen
+                          ? Container(
+                              margin: EdgeInsets.only(top: size.height * 0.025),
+                              // height: fullscreen ? 0 : size.height * 0.35,
+                              height: size.height * 0.35,
+                              // duration: Duration(milliseconds: 300),
+                              child: GridView.count(
+                                crossAxisCount: 1,
+                                scrollDirection: Axis.horizontal,
+                                childAspectRatio: 0.56,
+                                children: widget.related.map((value) {
+                                  return new InkWell(
+                                    onTap: () {
+                                      Navigator.pushReplacement(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (BuildContext context) =>
+                                              VideoApp(
+                                                  directory: widget.directory,
+                                                  section: widget.section,
+                                                  video: value,
+                                                  related: widget.related),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      margin: new EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        image: DecorationImage(
+                                          fit: BoxFit.cover,
+                                          image: FileImage(File(
+                                              '${widget.directory}/thumbnails/${widget.section}/$value.jpeg')),
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                        boxShadow: [
+                                          BoxShadow(
+                                              color: Colors.black45,
+                                              blurRadius: 5.0,
+                                              offset: Offset(0, 4))
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
                               ),
-                              decoration: BoxDecoration(
-                                image: DecorationImage(
-                                  fit: BoxFit.cover,
-                                  image: FileImage(File(
-                                      '${widget.directory}/thumbnails/${widget.section}/$value.jpeg')),
-                                ),
-                                borderRadius: BorderRadius.circular(10),
-                                boxShadow: [
-                                  BoxShadow(
-                                      color: Colors.black45,
-                                      blurRadius: 5.0,
-                                      offset: Offset(0, 4))
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
+                            )
+                          : Container(),
                     ),
                   ),
                 ),
