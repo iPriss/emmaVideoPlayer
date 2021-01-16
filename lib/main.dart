@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:path/path.dart';
 import 'package:wakelock/wakelock.dart';
 import 'package:dio/dio.dart';
+import 'package:duration/duration.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -356,7 +357,12 @@ class _VideoAppState extends State<VideoApp> {
         if (_controller.value.isPlaying) {
           Wakelock.enable();
           if (fullscreen == false) {
-            if (_timer == null || !_timer.isActive) startTimer();
+            if (_controller.value.position - _controller.value.duration >
+                Duration(seconds: 5)) {
+              if (_timer == null || !_timer.isActive) startTimer();
+            } else {
+              if (_timer != null && _timer.isActive) _timer.cancel();
+            }
           } else {
             if (_timer != null && _timer.isActive) _timer.cancel();
           }
@@ -369,7 +375,7 @@ class _VideoAppState extends State<VideoApp> {
           setState(
             () {
               fullscreen = false;
-              _timer.cancel();
+              if (_timer != null && _timer.isActive) _timer.cancel();
             },
           );
         }
@@ -381,11 +387,22 @@ class _VideoAppState extends State<VideoApp> {
     var size = MediaQuery.of(context).size;
 
     final double ratio = 1.77777778;
-    final double magicRatio = ratio / 2.5;
+    final double magicRatio = ratio / 2.535;
+    // 535
     double rHeight = size.width / ratio;
     if (rHeight > size.height) rHeight = size.height;
     // widget.related.removeWhere((item) => item == widget.video);
     final double margin = (size.height - rHeight) / 2;
+
+    List<String> progressDuration = Duration(
+            minutes: 0,
+            seconds: 0,
+            milliseconds: _controller.value.position.inMilliseconds)
+        .toString()
+        .split('.')[0]
+        .split(':');
+    String progressInMinutes =
+        '${progressDuration[1].padLeft(2, "0")}:${progressDuration[2].padLeft(2, "0")}';
 
     return Scaffold(
       body: SafeArea(
@@ -402,6 +419,7 @@ class _VideoAppState extends State<VideoApp> {
                 alignment: Alignment.topCenter,
                 child: Container(
                   child: AnimatedContainer(
+                    curve: Curves.easeOutQuart,
                     margin: new EdgeInsets.only(
                         top: fullscreen ? margin : margin * magicRatio,
                         bottom: fullscreen ? margin : margin * magicRatio),
@@ -418,28 +436,37 @@ class _VideoAppState extends State<VideoApp> {
                 ),
               ),
               Align(
-                alignment: Alignment(0, 0.22),
+                alignment: Alignment(-0.39, 0.352), // 345
                 child: AnimatedContainer(
-                  width: (size.width / _controller.value.aspectRatio) * 1.15,
-                  height: fullscreen ? 0 : 15,
+                  width: size.width * 0.83,
+                  // (size.width / _controller.value.aspectRatio) * 1.15, // Esto seria para cuando es celular?
+                  height: fullscreen ? 0 : 6,
                   duration: Duration(milliseconds: 2),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(15),
-                    child: VideoProgressIndicator(
-                      _controller,
-                      allowScrubbing: true,
-                      padding: EdgeInsets.all(0),
-                      colors: VideoProgressColors(
-                          playedColor: Color(0xffff5076),
-                          bufferedColor: Colors.white,
-                          backgroundColor: Colors.white),
-                    ),
+                  child: Stack(
+                    children: <Widget>[
+                      Container(
+                        // margin: EdgeInsets.all(0),
+                        height: 6,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(15),
+                          child: VideoProgressIndicator(
+                            _controller,
+                            allowScrubbing: true,
+                            padding: EdgeInsets.all(0),
+                            colors: VideoProgressColors(
+                                playedColor: Color(0xffff5076),
+                                bufferedColor: Colors.white,
+                                backgroundColor: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
               Align(
-                alignment: Alignment.lerp(
-                    Alignment(-0.66, 0.225), Alignment(0.66, 0.225), position),
+                alignment: Alignment.lerp(Alignment(-0.916, 0.356),
+                    Alignment(0.779, 0.356), position),
                 child: AnimatedOpacity(
                   duration: Duration(milliseconds: 2),
                   opacity: fullscreen ? 0 : 1,
@@ -449,13 +476,26 @@ class _VideoAppState extends State<VideoApp> {
                       decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border:
-                              Border.all(width: 7, color: Color(0xffff5076))),
+                              Border.all(width: 3, color: Color(0xffff5076))),
                       child: CircleAvatar(
                         backgroundColor: Colors.white,
-                        radius: 7,
-                        // child: Icon(Icons.add),
+                        radius: 4,
                       ),
                     ),
+                  ),
+                ),
+              ),
+              Align(
+                alignment: Alignment(0.9, 0.356), // 345
+                child: AnimatedOpacity(
+                  opacity: fullscreen ? 0 : 1,
+                  duration: Duration(milliseconds: 2),
+                  child: Text(
+                    progressInMinutes,
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontFamily: 'VAG'),
                   ),
                 ),
               ),
@@ -466,7 +506,7 @@ class _VideoAppState extends State<VideoApp> {
                     if (_timer != null && _timer.isActive) _timer.cancel();
                   },
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(maxHeight: size.height / 4),
+                    constraints: BoxConstraints(maxHeight: size.height / 4.74),
                     child: AnimatedSwitcher(
                       duration: Duration(milliseconds: 300),
                       child: !fullscreen
@@ -478,7 +518,7 @@ class _VideoAppState extends State<VideoApp> {
                               child: GridView.count(
                                 crossAxisCount: 1,
                                 scrollDirection: Axis.horizontal,
-                                childAspectRatio: 0.56,
+                                childAspectRatio: 0.655,
                                 children: widget.related.map((value) {
                                   return new InkWell(
                                     onTap: () {
@@ -531,10 +571,10 @@ class _VideoAppState extends State<VideoApp> {
         children: <Widget>[
           if (!fullscreen)
             Align(
-              alignment: Alignment(0.05, -0.30),
+              alignment: Alignment(0.05, -0.27),
               child: SizedBox(
-                width: size.width * 0.16,
-                height: size.height * 0.16,
+                width: size.width * 0.1315,
+                height: size.height * 0.1315,
                 child: FloatingActionButton(
                   onPressed: () {
                     setState(() {
@@ -548,7 +588,7 @@ class _VideoAppState extends State<VideoApp> {
                     _controller.value.isPlaying
                         ? Icons.pause_rounded
                         : Icons.play_arrow_rounded,
-                    size: size.width * 0.08,
+                    size: size.width * 0.0957,
                     color: Color(0xffff5076),
                   ),
                   backgroundColor: Colors.white,
@@ -557,7 +597,7 @@ class _VideoAppState extends State<VideoApp> {
             ),
           if (!fullscreen)
             Align(
-              alignment: Alignment(-0.95, -0.777),
+              alignment: Alignment(-0.95, -0.868),
               child: SizedBox(
                 width: size.width * 0.12,
                 height: size.height * 0.12,
@@ -567,7 +607,7 @@ class _VideoAppState extends State<VideoApp> {
                   },
                   heroTag: null,
                   child: Icon(Icons.close_rounded,
-                      color: Colors.white, size: size.width * 0.06),
+                      color: Colors.white, size: size.width * 0.069),
                   backgroundColor: Colors.transparent,
                 ),
               ),
