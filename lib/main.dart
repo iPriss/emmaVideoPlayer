@@ -256,10 +256,12 @@ class _SectionLobbyState extends State<SectionLobby> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => VideoApp(
-                                      directory: directory,
-                                      section: widget.section,
-                                      video: value,
-                                      related: getRandomList(ids, 30, value)),
+                                    directory: directory,
+                                    section: widget.section,
+                                    video: value,
+                                    related: getRandomList(ids, 30, value),
+                                    videoList: ids,
+                                  ),
                                 ),
                               );
                             },
@@ -302,13 +304,15 @@ class VideoApp extends StatefulWidget {
       @required this.directory,
       @required this.section,
       @required this.video,
-      @required this.related})
+      @required this.related,
+      @required this.videoList})
       : super(key: key);
 
   final String video;
   final String section;
   final String directory;
   final List related;
+  final List videoList;
 
   @override
   _VideoAppState createState() => _VideoAppState();
@@ -316,70 +320,173 @@ class VideoApp extends StatefulWidget {
 
 class _VideoAppState extends State<VideoApp> {
   VideoPlayerController _controller;
-  Timer _timer;
+
   bool fullscreen = true;
 
   double position = 0.0;
 
-  void startTimer() {
-    const oneSec = const Duration(seconds: 5);
-    _timer = new Timer.periodic(
-      oneSec,
-      (Timer timer) => setState(
-        () {
-          fullscreen = true;
-          _timer.cancel();
-        },
-      ),
-    );
+  // Del tipito
+  var _playingIndex = -1;
+  var _disposed = false;
+  var _isFullScreen = true;
+  var _isEndOfVideo = false;
+  var _progress = 0.0;
+  Timer _timerVisibleControl;
+  Timer _timerEnterFullscreen;
+  double _controlAlpha = 1.0;
+
+  var _playing = false;
+  bool get _isPlaying {
+    return _playing;
+  }
+
+  set _isPlaying(bool value) {
+    _playing = value;
+    _timerEnterFullscreen?.cancel();
+    if (value) {
+      if (!_isFullScreen)
+        _timerEnterFullscreen = Timer(Duration(seconds: 2), () {
+          _enterFullScreen();
+        });
+    }
+  }
+
+  void _onTapVideo() {
+    _toggleFullscreen();
   }
 
   @override
   void initState() {
+    Wakelock.enable();
+    _initializeAndPlay(-1);
     super.initState();
+  }
 
-    File file = new File(
-        '${widget.directory}/videos/${widget.section}/${widget.video}.mp4');
+  @override
+  void dispose() {
+    _disposed = true;
+    _timerVisibleControl?.cancel();
+    _timerEnterFullscreen?.cancel();
+    Wakelock.disable();
+    _exitFullScreen();
+    _controller?.pause(); // mute instantly
+    _controller?.dispose();
+    _controller = null;
+    super.dispose();
+  }
 
-    _controller = VideoPlayerController.file(file)
+  void _toggleFullscreen() async {
+    if (_isFullScreen) {
+      _exitFullScreen();
+    } else {
+      _enterFullScreen();
+    }
+  }
+
+  void _enterFullScreen() async {
+    debugPrint("enterFullScreen");
+    // await SystemChrome.setEnabledSystemUIOverlays([]);
+    // await SystemChrome.setPreferredOrientations(
+    //     [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+    if (_disposed) return;
+    setState(() {
+      _isFullScreen = true;
+    });
+  }
+
+  void _exitFullScreen() async {
+    debugPrint("exitFullScreen");
+    // await SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
+    // await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    if (_disposed) return;
+    setState(() {
+      _isFullScreen = false;
+    });
+  }
+
+  void _initializeAndPlay(int index) async {
+    print("_initializeAndPlay ---------> $index");
+    final video = index >= 0 ? widget.videoList[index] : widget.video;
+    File file =
+        new File('${widget.directory}/videos/${widget.section}/$video.mp4');
+
+    final controller = VideoPlayerController.file(file);
+
+    final old = _controller;
+    _controller = controller;
+    if (old != null) {
+      old.removeListener(_onControllerUpdated);
+      old.pause(); // mute instantly
+      debugPrint("---- old contoller paused.");
+    }
+
+    debugPrint("---- controller changed.");
+    setState(() {});
+
+    controller
       ..initialize().then((_) {
-        setState(() {
-          _controller.play();
-        });
-      })
-      ..addListener(() {
-        setState(
-          () {
-            position = _controller.value.position.inMilliseconds /
-                _controller.value.duration.inMilliseconds;
-          },
-        );
-        if (_controller.value.isPlaying) {
-          Wakelock.enable();
-          if (fullscreen == false) {
-            if (_controller.value.position - _controller.value.duration >
-                Duration(seconds: 5)) {
-              if (_timer == null || !_timer.isActive) startTimer();
-            } else {
-              if (_timer != null && _timer.isActive) _timer.cancel();
-            }
-          } else {
-            if (_timer != null && _timer.isActive) _timer.cancel();
-          }
-        } else {
-          Wakelock.disable();
-          if (_timer != null && _timer.isActive) _timer.cancel();
-        }
-
-        if (_controller.value.position >= _controller.value.duration) {
-          setState(
-            () {
-              fullscreen = false;
-              if (_timer != null && _timer.isActive) _timer.cancel();
-            },
-          );
-        }
+        debugPrint("---- controller initialized");
+        old?.dispose();
+        _playingIndex = index;
+        _duration = null;
+        _position = null;
+        controller.addListener(_onControllerUpdated);
+        controller.seekTo(Duration(milliseconds: 0));
+        controller.play();
+        setState(() {});
       });
+  }
+
+  var _updateProgressInterval = 0.0;
+  Duration _duration;
+  Duration _position;
+
+  void _onControllerUpdated() async {
+    if (_disposed) return;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (_updateProgressInterval > now) {
+      return;
+    }
+    _updateProgressInterval = now + 10.0;
+
+    final controller = _controller;
+    if (controller == null) return;
+    if (!controller.value.initialized) return;
+    if (_duration == null) {
+      _duration = _controller.value.duration;
+    }
+    var duration = _duration;
+    if (duration == null) return;
+
+    var position = await controller.position;
+    _position = position;
+    final playing = controller.value.isPlaying;
+    final isEndOfVideo =
+        position.inMilliseconds > 0 && position.inSeconds >= duration.inSeconds;
+
+    if (playing) {
+      if (_disposed) return;
+    }
+
+    // Lo saco del if playing por que necesito que se actualicepor mas que este pausado
+    setState(() {
+      _progress = position.inMilliseconds.ceilToDouble() /
+          duration.inMilliseconds.ceilToDouble();
+    });
+
+    if (_isPlaying != playing || _isEndOfVideo != isEndOfVideo) {
+      _isPlaying = playing;
+      _isEndOfVideo = isEndOfVideo;
+      debugPrint(
+          "updated -----> isPlaying=$_isPlaying / isEndOfVideo=$_isEndOfVideo");
+      if (isEndOfVideo && !playing) {
+        debugPrint(
+            "========================== End of Clip / Handle NEXT ========================== ");
+        final isComplete = _playingIndex == widget.videoList.length - 1;
+        if (!isComplete) _initializeAndPlay(_playingIndex + 1);
+      }
+    }
   }
 
   @override
@@ -388,10 +495,10 @@ class _VideoAppState extends State<VideoApp> {
 
     final double ratio = 1.77777778;
     final double magicRatio = ratio / 2.535;
-    // 535
+
     double rHeight = size.width / ratio;
     if (rHeight > size.height) rHeight = size.height;
-    // widget.related.removeWhere((item) => item == widget.video);
+
     final double margin = (size.height - rHeight) / 2;
 
     List<String> progressDuration = Duration(
@@ -404,14 +511,15 @@ class _VideoAppState extends State<VideoApp> {
     String progressInMinutes =
         '${progressDuration[1].padLeft(2, "0")}:${progressDuration[2].padLeft(2, "0")}';
 
+    if (_controller.value.initialized &&
+        _controller.value.position >= _controller.value.duration) {}
+
     return Scaffold(
       body: SafeArea(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () {
-            setState(() {
-              fullscreen = !fullscreen;
-            });
+            _toggleFullscreen();
           },
           child: Stack(
             children: <Widget>[
@@ -421,12 +529,12 @@ class _VideoAppState extends State<VideoApp> {
                   child: AnimatedContainer(
                     curve: Curves.easeOutQuart,
                     margin: new EdgeInsets.only(
-                        top: fullscreen ? margin : margin * magicRatio,
-                        bottom: fullscreen ? margin : margin * magicRatio),
-                    width: fullscreen ? size.width : size.width * magicRatio,
-                    height: fullscreen ? size.height : rHeight * magicRatio,
+                        top: _isFullScreen ? margin : margin * magicRatio,
+                        bottom: _isFullScreen ? margin : margin * magicRatio),
+                    width: _isFullScreen ? size.width : size.width * magicRatio,
+                    height: _isFullScreen ? size.height : rHeight * magicRatio,
                     duration: Duration(milliseconds: 200),
-                    child: _controller.value.initialized
+                    child: _controller != null && _controller.value.initialized
                         ? AspectRatio(
                             aspectRatio: ratio,
                             child: VideoPlayer(_controller),
@@ -440,13 +548,13 @@ class _VideoAppState extends State<VideoApp> {
                 child: AnimatedContainer(
                   width: size.width * 0.83,
                   // (size.width / _controller.value.aspectRatio) * 1.15, // Esto seria para cuando es celular?
-                  height: fullscreen ? 0 : 6,
+                  height: _isFullScreen ? 0 : 6, // Duplicar en iOS
                   duration: Duration(milliseconds: 2),
                   child: Stack(
                     children: <Widget>[
                       Container(
                         // margin: EdgeInsets.all(0),
-                        height: 6,
+                        height: 6, // Duplicar en iOS
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(15),
                           child: VideoProgressIndicator(
@@ -466,10 +574,10 @@ class _VideoAppState extends State<VideoApp> {
               ),
               Align(
                 alignment: Alignment.lerp(Alignment(-0.916, 0.356),
-                    Alignment(0.779, 0.356), position),
+                    Alignment(0.779, 0.356), _progress),
                 child: AnimatedOpacity(
                   duration: Duration(milliseconds: 2),
-                  opacity: fullscreen ? 0 : 1,
+                  opacity: _isFullScreen ? 0 : 1,
                   child: IgnorePointer(
                     child: Container(
                       padding: EdgeInsets.zero,
@@ -486,16 +594,18 @@ class _VideoAppState extends State<VideoApp> {
                 ),
               ),
               Align(
-                alignment: Alignment(0.9, 0.356), // 345
+                alignment: Alignment(0.9, 0.356),
                 child: AnimatedOpacity(
-                  opacity: fullscreen ? 0 : 1,
+                  opacity: _isFullScreen ? 0 : 1,
                   duration: Duration(milliseconds: 2),
                   child: Text(
                     progressInMinutes,
                     style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        fontFamily: 'VAG'),
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontFamily: 'VAG',
+                      fontSize: 13, // Duplicar en iOS
+                    ),
                   ),
                 ),
               ),
@@ -503,13 +613,13 @@ class _VideoAppState extends State<VideoApp> {
                 alignment: Alignment.bottomCenter,
                 child: GestureDetector(
                   onPanDown: (details) {
-                    if (_timer != null && _timer.isActive) _timer.cancel();
+                    _timerEnterFullscreen?.cancel();
                   },
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxHeight: size.height / 4.74),
                     child: AnimatedSwitcher(
                       duration: Duration(milliseconds: 300),
-                      child: !fullscreen
+                      child: !_isFullScreen
                           ? Container(
                               margin: EdgeInsets.only(top: size.height * 0.025),
                               // height: fullscreen ? 0 : size.height * 0.35,
@@ -527,16 +637,18 @@ class _VideoAppState extends State<VideoApp> {
                                         MaterialPageRoute(
                                           builder: (BuildContext context) =>
                                               VideoApp(
-                                                  directory: widget.directory,
-                                                  section: widget.section,
-                                                  video: value,
-                                                  related: widget.related),
+                                            directory: widget.directory,
+                                            section: widget.section,
+                                            video: value,
+                                            related: widget.related,
+                                            videoList: widget.videoList,
+                                          ),
                                         ),
                                       );
                                     },
                                     child: Container(
                                       margin: new EdgeInsets.symmetric(
-                                        horizontal: 4,
+                                        horizontal: 4, // Duplicar en iOS
                                         vertical: 3,
                                       ),
                                       decoration: BoxDecoration(
@@ -569,25 +681,35 @@ class _VideoAppState extends State<VideoApp> {
       ),
       floatingActionButton: Stack(
         children: <Widget>[
-          if (!fullscreen)
+          if (!_isFullScreen)
             Align(
               alignment: Alignment(0.05, -0.27),
               child: SizedBox(
                 width: size.width * 0.1315,
                 height: size.height * 0.1315,
                 child: FloatingActionButton(
-                  onPressed: () {
-                    setState(() {
-                      _controller.value.isPlaying
-                          ? _controller.pause()
-                          : _controller.play();
-                    });
+                  onPressed: () async {
+                    if (_isPlaying) {
+                      _controller?.pause();
+                      _isPlaying = false;
+                    } else {
+                      final controller = _controller;
+                      if (controller != null) {
+                        final pos = _position?.inSeconds ?? 0;
+                        final dur = _duration?.inSeconds ?? 0;
+                        final isEnd = pos >= dur;
+                        if (isEnd) {
+                          _initializeAndPlay(_playingIndex);
+                        } else {
+                          controller.play();
+                        }
+                      }
+                    }
+                    setState(() {});
                   },
                   heroTag: null,
                   child: Icon(
-                    _controller.value.isPlaying
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
+                    _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                     size: size.width * 0.0957,
                     color: Color(0xffff5076),
                   ),
@@ -595,7 +717,7 @@ class _VideoAppState extends State<VideoApp> {
                 ),
               ),
             ),
-          if (!fullscreen)
+          if (!_isFullScreen)
             Align(
               alignment: Alignment(-0.95, -0.868),
               child: SizedBox(
@@ -615,12 +737,5 @@ class _VideoAppState extends State<VideoApp> {
         ],
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-    if (_controller.value.isPlaying) _controller.pause();
-    _controller.dispose();
   }
 }
